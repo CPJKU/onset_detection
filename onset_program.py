@@ -208,8 +208,9 @@ class Spectrogram(object):
         :param wav: a Wav object
         :param window_size: is the size for the window in samples [default=2048]
         :param fps: is the desired frame rate [default=100 fps]
-        :param online: work in online mode [default=True]
+        :param online: work in online mode (i.e. use only past audio information) [default=True]
         :param phase: include phase information [default=True]
+
         """
         # init some variables
         self.wav = wav
@@ -252,7 +253,7 @@ class Spectrogram(object):
                 # normal read operation
                 signal = self.wav.audio[seek:seek + self.window_size]
             # multiply the signal with the window function
-            signal = np.multiply(signal, win)
+            signal = signal * win
             # only shift and perform complex DFT if needed
             if phase:
                 # circular shift the signal (needed for correct phase)
@@ -311,7 +312,8 @@ class Spectrogram(object):
         :param mul: multiply the magnitude spectrogram with given value [default=20]
         :param add: add the given value to the magnitude spectrogram [default=1]
         """
-        assert add > 0, 'a positive value must be added before taking the logarithm'
+        if add <= 0:
+            raise ValueError("a positive value must be added before taking the logarithm")
         self.spec = np.log10(mul * self.spec + add)
 
 
@@ -359,7 +361,7 @@ class SpectralODF(object):
         PhD thesis, University of Bristol, 1996
         """
         # HFC weights the magnitude spectrogram by the bin number, thus emphasising high frequencies
-        return np.mean(self.s.spec * np.arange(self.bins), axis=1)
+        return np.mean(self.s.spec * np.arange(self.s.bins), axis=1)
 
     def sd(self):
         """Spectral Diff.
@@ -398,7 +400,8 @@ class SpectralODF(object):
         Proceedings of the International Computer Music Conference (ICMC), 2003
 
         """
-        assert epsilon > 0, 'a positive value must be added before division'
+        if epsilon <= 0:
+            raise ValueError("a positive value must be added before division")
         mkl = np.zeros_like(self.s.spec)
         mkl[1:] = self.s.spec[1:] / (self.s.spec[0:-1] + epsilon)
         # note: the original MKL uses sum instead of mean, but the range of mean is much more suitable
@@ -430,7 +433,8 @@ class SpectralODF(object):
         Simon Dixon
         Proceedings of the 9th International Conference on Digital Audio Effects (DAFx), 2006
         """
-        assert np.shape(self.s.phase) == np.shape(self.s.spec)  # make sure the spectrogram is not filtered before
+        # make sure the spectrogram is not filtered before
+        assert np.shape(self.s.phase) == np.shape(self.s.spec)
         # wpd = spec * pd
         return np.mean(np.abs(self._pd() * self.s.spec), axis=1)
 
@@ -443,7 +447,8 @@ class SpectralODF(object):
         Simon Dixon
         Proceedings of the 9th International Conference on Digital Audio Effects (DAFx), 2006
         """
-        assert epsilon > 0, 'a positive value must be added before division'
+        if epsilon <= 0:
+            raise ValueError("a positive value must be added before division")
         # normalize WPD by the sum of the spectrogram (add a small amount so that we don't divide by 0)
         return self.wpd() / np.add(np.mean(self.s.spec, axis=1), epsilon)
 
@@ -499,6 +504,14 @@ class SpectralODF(object):
 class Onsets(object):
     """Onset Class"""
     def __init__(self, activations, fps, online=True):
+        """
+        Creates a new Spectrogram object instance and performs a STFT on the given audio.
+
+        :param activations: an array containing the activations of the ODF
+        :param fps: frame rate of the activations
+        :param online: work in online mode (i.e. use only past information) [default=True]
+
+        """
         self.activations = None     # activations of the ODF
         self.fps = fps              # framerate of the activation function
         self.online = online        # online peak-picking
@@ -567,6 +580,8 @@ class Onsets(object):
         Write the detected onsets to the given file.
 
         :param filename: the target file name
+
+        Only useful if detect() was invoked before.
 
         """
         with open(filename, 'w') as f:
@@ -639,7 +654,7 @@ def parser():
     onset_opts.add_argument('-o', dest='odf', action='append', default=[], help='use this onset detection function (can be used multiple times) [hfc,sd,sf,mkl,pd,wpd,nwpd,cd,rcd,all]')
     onset_opts.add_argument('-t', dest='threshold', action='store', type=float, default=2.7, help='detection threshold')
     # version
-    p.add_argument('--version', action='version', version='%(prog)s 1.0 (2012-10-01)')
+    p.add_argument('--version', action='version', version='%(prog)s 1.01 (2012-10-03)')
     # parse arguments
     args = p.parse_args()
 
@@ -656,10 +671,10 @@ def parser():
     if 'all' in args.odf:
         args.odf = methods
     # remove not implemented/mistyped methods
-    args.odf = [odf for odf in args.odf if odf in methods]
+    args.odf = list(set(args.odf) & set(methods))
     assert args.odf, 'at least one onset detection function must be given'
     # check if we need the STFT phase information
-    if [odf for odf in args.odf if odf in ['pd', 'wpd', 'nwpd', 'cd', 'rcd']]:
+    if set(args.odf) & set(['pd', 'wpd', 'nwpd', 'cd', 'rcd']):
         args.phase = True
     else:
         args.phase = False
