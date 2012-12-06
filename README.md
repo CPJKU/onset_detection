@@ -10,3 +10,9 @@ This file is suitable for evaluation with the `onset_evaluation.py` scripts whic
 
 Please see the `-h` option to get a more detailed description.
 
+Requirements
+------------
+* Python 2.7 or 2.6 with argparse module
+* Numpy
+* Scipy
+

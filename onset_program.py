@@ -77,6 +77,8 @@ class Filter(object):
         frequencies = np.round(np.asarray(frequencies) / factor).astype(int)
         # only keep unique bins
         frequencies = np.unique(frequencies)
+        # filter out all frequencies outside the valid range
+        frequencies = [f for f in frequencies if f < ffts]
         # number of bands
         bands = len(frequencies) - 2
         assert bands >= 3, "cannot create filterbank with less than 3 frequencies"
