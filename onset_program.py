@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-Copyright (c) 2012, Sebastian Böck <sebastian.boeck@jku.at>
+Copyright (c) 2012, 2013 Sebastian Böck <sebastian.boeck@jku.at>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -82,16 +82,14 @@ class Filter(object):
         # number of bands
         bands = len(frequencies) - 2
         assert bands >= 3, "cannot create filterbank with less than 3 frequencies"
-        # init the filter matrix with size: filters x ffts
-        self.filterbank = np.zeros([bands, ffts])
+        # init the filter matrix with size: ffts x filter bands
+        self.filterbank = np.zeros([ffts, bands], dtype=np.float)
         # process all bands
         for band in range(bands):
             # edge & center frequencies
             start, mid, stop = frequencies[band:band + 3]
             # create a triangular filter
-            self.filterbank[band][start:stop] = self.triang(start, mid, stop, equal)
-        # flip filterbank to right direction
-        self.filterbank = self.filterbank.T
+            self.filterbank[start:stop, band] = self.triang(start, mid, stop, equal)
 
     @staticmethod
     def frequencies(bands, fmin, fmax, a=440):
@@ -203,65 +201,64 @@ class Wav(object):
 
 class Spectrogram(object):
     """Spectrogram Class"""
-    def __init__(self, wav, window_size=2048, fps=100, online=True, phase=True):
+    def __init__(self, wav, window_size=2048, fps=200, online=True, phase=True):
         """
         Creates a new Spectrogram object instance and performs a STFT on the given audio.
 
         :param wav: a Wav object
         :param window_size: is the size for the window in samples [default=2048]
-        :param fps: is the desired frame rate [default=100 fps]
+        :param fps: is the desired frame rate [default=200]
         :param online: work in online mode (i.e. use only past audio information) [default=True]
         :param phase: include phase information [default=True]
 
         """
         # init some variables
         self.wav = wav
-        self.window_size = window_size
         self.fps = fps
         # derive some variables
         self.hop_size = float(self.wav.samplerate) / float(self.fps)  # use floats so that seeking works properly
         self.frames = int(self.wav.samples / self.hop_size)
-        self.ffts = int(self.window_size / 2)
-        self.bins = int(self.window_size / 2)  # initial number equal to ffts, can change if filters are used
+        self.ffts = int(window_size / 2)
+        self.bins = int(window_size / 2)  # initial number equal to ffts, can change if filters are used
         # init STFT matrix
         self.stft = np.empty([self.frames, self.ffts], np.complex)
         # create windowing function
-        win = np.hanning(self.window_size)
+        self.window = np.hanning(window_size)
         # step through all frames
         for frame in range(self.frames):
             # seek to the right position in the audio signal
             if online:
                 # step back a complete window_size after moving forward 1 hop_size
                 # so that the current position is at the stop of the window
-                seek = int((frame + 1) * self.hop_size - self.window_size)
+                seek = int((frame + 1) * self.hop_size - window_size)
             else:
                 # step back half of the window_size so that the frame represents the centre of the window
-                seek = int(frame * self.hop_size - self.window_size / 2)
+                seek = int(frame * self.hop_size - window_size / 2)
             # read in the right portion of the audio
             if seek >= self.wav.samples:
                 # stop of file reached
                 break
-            elif seek + self.window_size >= self.wav.samples:
+            elif seek + window_size >= self.wav.samples:
                 # stop behind the actual audio stop, append zeros accordingly
-                zeros = np.zeros(seek + self.window_size - self.wav.samples)
+                zeros = np.zeros(seek + window_size - self.wav.samples)
                 signal = self.wav.audio[seek:]
                 signal = np.append(signal, zeros)
             elif seek < 0:
                 # start before the actual audio start, pad with zeros accordingly
                 zeros = np.zeros(-seek)
-                signal = self.wav.audio[0:seek + self.window_size]
+                signal = self.wav.audio[0:seek + window_size]
                 signal = np.append(zeros, signal)
             else:
                 # normal read operation
-                signal = self.wav.audio[seek:seek + self.window_size]
+                signal = self.wav.audio[seek:seek + window_size]
             # multiply the signal with the window function
-            signal = signal * win
+            signal = signal * self.window
             # only shift and perform complex DFT if needed
             if phase:
                 # circular shift the signal (needed for correct phase)
                 signal = fft.fftshift(signal)
             # perform DFT
-            self.stft[frame] = fft.fft(signal, self.window_size)[:self.ffts]
+            self.stft[frame] = fft.fft(signal, window_size)[:self.ffts]
             # next frame
         # magnitude spectrogram
         self.spec = np.abs(self.stft)
@@ -325,34 +322,50 @@ class SpectralODF(object):
     based on the magnitude or phase information of a spectrogram.
 
     """
-    def __init__(self, spectrogram):
+    def __init__(self, spectrogram, ratio=0.22, frames=None):
         """
         Creates a new ODF object instance.
 
         :param spectrogram: the spectrogram on which the detections functions operate
+        :param ratio: calculate the difference to the frame which has the given magnitude ratio [default=0.22]
+        :param frames: calculate the difference to the N-th previous frame [default=None]
 
         """
         self.s = spectrogram
-
-    @staticmethod
-    def diff(spec, pos=False, frames=1):
-        """Calculates the difference on the magnitude spectrogram.
-
-        :param spec: the magnitude spectrogram
-        :param pos: only keep positive values [default=False]
-        :param frames: calculate the difference to the N-th previous frame [default=1]
-
-        """
-        diff = np.zeros_like(spec)
-        diff[frames:] = spec[frames:] - spec[0:-frames]
-        if pos:
-            diff = diff * (diff > 0)
-        return diff
+        # determine the number off diff frames
+        if frames is None:
+            # get the first sample with a higher magnitude than given ratio
+            sample = np.argmax(self.s.window > ratio)
+            diff_samples = self.s.window.size / 2 - sample
+            # convert to frames
+            frames = int(round(diff_samples / self.s.hop_size))
+        # set the minimum to 1
+        if frames < 1:
+            frames = 1
+        self.diff_frames = frames
 
     @staticmethod
     def wraptopi(angle):
         """Wrap the phase information to the range -π...π"""
         return np.mod(angle + np.pi, 2.0 * np.pi) - np.pi
+
+    def diff(self, spec, pos=False, diff_frames=None):
+        """
+        Calculates the difference on the magnitude spectrogram.
+
+        :param spec: the magnitude spectrogram
+        :param pos: only keep positive values [default=False]
+        :param diff_frames: calculate the difference to the N-th previous frame [default=None]
+
+        """
+        diff = np.zeros_like(spec)
+        if diff_frames is None:
+            diff_frames = self.diff_frames
+        # calculate the diff
+        diff[diff_frames:] = spec[diff_frames:] - spec[0:-diff_frames]
+        if pos:
+            diff = diff * (diff > 0)
+        return diff
 
     # Onset Detection Functions
     def hfc(self):
@@ -526,16 +539,16 @@ class Onsets(object):
             # read in the activations from a file
             self.load(activations)
 
-    def detect(self, threshold, combine=3, pre_avg=9, pre_max=4, post_max=4, post_avg=5, delay=1):
+    def detect(self, threshold, combine=30, pre_avg=100, pre_max=30, post_avg=0, post_max=0, delay=0):
         """Detects the onsets.
 
         :param threshold: threshold for peak-picking
-        :param combine: only report 1 onset for N frames [default=3]
-        :param pre_avg: use N past frames for moving average [default=9]
-        :param post_avg: use N future frames for moving average [default=5]
-        :param pre_max: use N past frames for moving maximum [default=4]
-        :param post_max: use N future frames for moving maximum [default=4]
-        :param delay: report the onset N fames in the future [default=1]
+        :param combine: only report 1 onset for N miliseconds [default=30]
+        :param pre_avg: use N miliseconds past information for moving average [default=100]
+        :param pre_max: use N miliseconds past information for moving maximum [default=30]
+        :param post_avg: use N miliseconds future information for moving average [default=0]
+        :param post_max: use N miliseconds future information for moving maximum [default=0]
+        :param delay: report the onset N miliseconds in the future [default=0]
 
         In online mode, post_avg and post_max are set to 0.
 
@@ -551,6 +564,14 @@ class Onsets(object):
         if self.online:
             post_max = 0
             post_avg = 0
+        # convert timing information to frames
+        pre_avg = int(round(self.fps * pre_avg / 1000.))
+        pre_max = int(round(self.fps * pre_max / 1000.))
+        post_max = int(round(self.fps * post_max / 1000.))
+        post_avg = int(round(self.fps * post_avg / 1000.))
+        # convert to seconds
+        combine /= 1000.
+        delay /= 1000.
         # init detections
         self.detections = []
         # moving maximum
@@ -565,17 +586,15 @@ class Onsets(object):
         detections = self.activations * (self.activations == mov_max)
         # detections must be greater or equal than the moving average + threshold
         detections = detections * (detections >= mov_avg + threshold)
-        # shift detections
-        if delay > 0:
-            detections[delay:] = detections[:-delay]
         # convert detected onsets to a list of timestamps
         last_onset = 0
         for i in np.nonzero(detections)[0]:
-            # only report an onset if the last N frames none was reported
-            if i > last_onset + combine:
-                self.detections.append(float(i) / float(self.fps))
+            onset = float(i) / float(self.fps) + delay
+            # only report an onset if the last N miliseconds none was reported
+            if onset > last_onset + combine:
+                self.detections.append(onset)
                 # save last reported onset
-                last_onset = i
+                last_onset = onset
 
     def write(self, filename):
         """
@@ -633,8 +652,10 @@ def parser():
     wav_opts.add_argument('--att', action='store', type=float, default=None, help='attenuate the audio by ATT dB')
     # spectrogram options
     spec_opts = p.add_argument_group('spectrogram arguments')
-    spec_opts.add_argument('--fps', action='store', default=100, type=int, help='frames per second')
-    spec_opts.add_argument('--window', dest='window', action='store', type=int, default=2048, help='DFT window length')
+    spec_opts.add_argument('--fps', action='store', default=200, type=int, help='frames per second')
+    spec_opts.add_argument('--window', action='store', type=int, default=2048, help='DFT window length')
+    spec_opts.add_argument('--ratio', action='store', type=float, default=0.22, help='window magnitude ratio to calc number of diff frames')
+    spec_opts.add_argument('--frames', action='store', type=int, default=None, help='diff frames')
     # pre-processing
     pre_opts = p.add_argument_group('pre-processing arguments')
     # aw
@@ -654,7 +675,13 @@ def parser():
     # onset detection
     onset_opts = p.add_argument_group('onset detection arguments')
     onset_opts.add_argument('-o', dest='odf', action='append', default=[], help='use this onset detection function (can be used multiple times) [hfc,sd,sf,mkl,pd,wpd,nwpd,cd,rcd,all]')
-    onset_opts.add_argument('-t', dest='threshold', action='store', type=float, default=2.7, help='detection threshold')
+    onset_opts.add_argument('-t', dest='threshold', action='store', type=float, default=4, help='detection threshold')
+    onset_opts.add_argument('--combine', action='store', type=float, default=30, help='combine onsets within N miliseconds [default=30]')
+    onset_opts.add_argument('--pre_avg', action='store', type=float, default=100, help='build average over N previous miliseconds [default=100]')
+    onset_opts.add_argument('--pre_max', action='store', type=float, default=30, help='search maximum over N previous miliseconds [default=30]')
+    onset_opts.add_argument('--post_avg', action='store', type=float, default=0, help='build average over N following miliseconds [default=0]')
+    onset_opts.add_argument('--post_max', action='store', type=float, default=0, help='search maximum over N following miliseconds [default=0]')
+    onset_opts.add_argument('--delay', action='store', type=float, default=0, help='combine onsets within N miliseconds [default=0]')
     # version
     p.add_argument('--version', action='version', version='%(prog)s 1.01 (2012-10-03)')
     # parse arguments
@@ -764,15 +791,17 @@ def main():
                 pass
             else:
                 # use the spectrogram to create an SpectralODF object
-                sodf = SpectralODF(s)
+                sodf = SpectralODF(s, args.ratio, args.frames)
                 # perform detection function on the object and create an Onset
                 # object with the returned activations
                 o = Onsets(getattr(sodf, odf)(), args.fps, args.online)
                 if args.save:
                     # save the raw ODF activations
                     o.save("%s.onsets.%s" % (filename, odf))
+                    # do not proceed with onset detection
+                    continue
             # detect the onsets
-            o.detect(args.threshold)
+            o.detect(args.threshold, args.combine, args.pre_avg, args.pre_max, args.post_avg, args.post_max, args.delay)
             # write the onsets to a file
             if len(args.odf) > 1:
                 # include the ODF name

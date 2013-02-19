@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-Copyright (c) 2012, Sebastian Böck <sebastian.boeck@jku.at>
+Copyright (c) 2012 Sebastian Böck <sebastian.boeck@jku.at>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 This software was released together with the paper
 
 "Evaluating the Online Capabilities of Onset Detection Methods"
-by SebastiannBöck, Florian Krebs and Markus Schedl
+by Sebastian Böck, Florian Krebs and Markus Schedl
 in Proceedings of the 13th International Society for Music Information
 Retrieval Conference (ISMIR), 2012
 
