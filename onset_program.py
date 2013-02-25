@@ -684,7 +684,7 @@ def parser():
     onset_opts.add_argument('--post_max', action='store', type=float, default=0, help='search maximum over N following miliseconds [default=0]')
     onset_opts.add_argument('--delay', action='store', type=float, default=0, help='combine onsets within N miliseconds [default=0]')
     # version
-    p.add_argument('--version', action='version', version='%(prog)s 1.01 (2012-10-03)')
+    p.add_argument('--version', action='version', version='%(prog)s 1.03 (2013-02-25)')
     # parse arguments
     args = p.parse_args()
 
