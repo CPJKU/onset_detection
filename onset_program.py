@@ -520,7 +520,8 @@ class Onsets(object):
     """Onset Class"""
     def __init__(self, activations, fps, online=True):
         """
-        Creates a new Spectrogram object instance and performs a STFT on the given audio.
+        Creates a new Onset object instance and performs peak-picking on the
+        given activations of the ODF (Onset Detection Function).
 
         :param activations: an array containing the activations of the ODF
         :param fps: frame rate of the activations
