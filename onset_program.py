@@ -56,7 +56,8 @@ class Filter(object):
 
     """
     def __init__(self, ffts, fs, bands=12, fmin=27.5, fmax=16000, equal=False):
-        """Creates a new Filter object instance.
+        """
+        Creates a new Filter object instance.
 
         :param ffts: number of FFT coefficients
         :param fs: sample rate of the audio file
@@ -190,17 +191,26 @@ class Wav(object):
         self.audio /= np.power(np.sqrt(10.), attenuation / 10.)
 
     def downmix(self):
-        """Down-mixe the audio signal to mono."""
+        """
+        Down-mix the audio signal to mono.
+
+        """
         if self.channels > 1:
             self.audio = np.sum(self.audio, -1) / self.channels
 
     def normalize(self):
-        """Normalize the audio signal."""
+        """
+        Normalize the audio signal.
+
+        """
         self.audio /= np.max(self.audio)
 
 
 class Spectrogram(object):
-    """Spectrogram Class"""
+    """
+    Spectrogram Class.
+
+    """
     def __init__(self, wav, window_size=2048, fps=200, online=True, phase=True):
         """
         Creates a new Spectrogram object instance and performs a STFT on the given audio.
@@ -268,7 +278,8 @@ class Spectrogram(object):
 
     # pre-processing stuff
     def aw(self, floor=5, relaxation=10):
-        """Perform adaptive whitening on the magnitude spectrogram.
+        """
+        Perform adaptive whitening on the magnitude spectrogram.
 
         :param floor: floor value [default=5]
         :param relaxation: relaxation time in seconds [default=10]
@@ -276,6 +287,7 @@ class Spectrogram(object):
         "Adaptive Whitening For Improved Real-time Audio Onset Detection"
         Dan Stowell and Mark Plumbley
         Proceedings of the International Computer Music Conference (ICMC), 2007
+
         """
         mem_coeff = 10.0 ** (-6. * relaxation / self.fps)
         P = np.zeros_like(self.spec)
@@ -290,11 +302,12 @@ class Spectrogram(object):
         self.spec /= P
 
     def filter(self, filterbank=None):
-        """Filter the magnitude spectrogram with a filterbank.
+        """
+        Filter the magnitude spectrogram with a filterbank.
 
-        :param filterbank: Filter object [default=None]
+        :param filterbank: Filter object which includes the filterbank [default=None]
 
-        If no filterbank is given a standard one will be created.
+        If no filter is given a standard one will be created.
 
         """
         if filterbank is None:
@@ -306,10 +319,12 @@ class Spectrogram(object):
         self.bins = np.shape(filterbank)[1]
 
     def log(self, mul=20, add=1):
-        """Take the logarithm of the magnitude spectrogram.
+        """
+        Take the logarithm of the magnitude spectrogram.
 
         :param mul: multiply the magnitude spectrogram with given value [default=20]
         :param add: add the given value to the magnitude spectrogram [default=1]
+
         """
         if add <= 0:
             raise ValueError("a positive value must be added before taking the logarithm")
@@ -346,7 +361,10 @@ class SpectralODF(object):
 
     @staticmethod
     def wraptopi(angle):
-        """Wrap the phase information to the range -π...π"""
+        """
+        Wrap the phase information to the range -π...π.
+
+        """
         return np.mod(angle + np.pi, 2.0 * np.pi) - np.pi
 
     def diff(self, spec, pos=False, diff_frames=None):
@@ -369,17 +387,20 @@ class SpectralODF(object):
 
     # Onset Detection Functions
     def hfc(self):
-        """High Frequency Content.
+        """
+        High Frequency Content.
 
         "Computer Modeling of Sound for Transformation and Synthesis of Musical Signals"
         Paul Masri
         PhD thesis, University of Bristol, 1996
+
         """
         # HFC weights the magnitude spectrogram by the bin number, thus emphasising high frequencies
         return np.mean(self.s.spec * np.arange(self.s.bins), axis=1)
 
     def sd(self):
-        """Spectral Diff.
+        """
+        Spectral Diff.
 
         "A hybrid approach to musical note onset detection"
         Chris Duxbury, Mark Sandler and Matthew Davis
@@ -390,17 +411,20 @@ class SpectralODF(object):
         return np.sum(self.diff(self.s.spec, pos=True) ** 2, axis=1)
 
     def sf(self):
-        """Spectral Flux.
+        """
+        Spectral Flux.
 
         "Computer Modeling of Sound for Transformation and Synthesis of Musical Signals"
         Paul Masri
         PhD thesis, University of Bristol, 1996
+
         """
         # Spectral flux is the sum of all positive 1st order differences
         return np.sum(self.diff(self.s.spec, pos=True), axis=1)
 
     def mkl(self, epsilon=0.000001):
-        """Modified Kullback-Leibler.
+        """
+        Modified Kullback-Leibler.
 
         :param epsilon: add epsilon to avoid division by 0 [default=0.000001]
 
@@ -423,7 +447,10 @@ class SpectralODF(object):
         return np.mean(np.log(1 + mkl), axis=1)
 
     def _pd(self):
-        """Helper method used by pd() & wpd()."""
+        """
+        Helper method used by pd() & wpd().
+
+        """
         pd = np.zeros_like(self.s.phase)
         # instantaneous frequency is given by the first difference ψ′(n, k) = ψ(n, k) − ψ(n − 1, k)
         # change in instantaneous frequency is given by the second order difference ψ′′(n, k) = ψ′(n, k) − ψ′(n − 1, k)
@@ -432,21 +459,25 @@ class SpectralODF(object):
         return self.wraptopi(pd)
 
     def pd(self):
-        """Phase Deviation.
+        """
+        Phase Deviation.
 
         "On the use of phase and energy for musical onset detection in the complex domain"
         Juan Pablo Bello, Chris Duxbury, Matthew Davies and Mark Sandler
         IEEE Signal Processing Letters, Volume 11, Number 6, 2004
+
         """
         # take the mean of the absolute changes in instantaneous frequency
         return np.mean(np.abs(self._pd()), axis=1)
 
     def wpd(self):
-        """Weighted Phase Deviation.
+        """
+        Weighted Phase Deviation.
 
         "Onset Detection Revisited"
         Simon Dixon
         Proceedings of the 9th International Conference on Digital Audio Effects (DAFx), 2006
+
         """
         # make sure the spectrogram is not filtered before
         assert np.shape(self.s.phase) == np.shape(self.s.spec)
@@ -454,13 +485,15 @@ class SpectralODF(object):
         return np.mean(np.abs(self._pd() * self.s.spec), axis=1)
 
     def nwpd(self, epsilon=0.000001):
-        """Normalized Weighted Phase Deviation.
+        """
+        Normalized Weighted Phase Deviation.
 
         :param epsilon: add epsilon to avoid division by 0 [default=0.000001]
 
         "Onset Detection Revisited"
         Simon Dixon
         Proceedings of the 9th International Conference on Digital Audio Effects (DAFx), 2006
+
         """
         if epsilon <= 0:
             raise ValueError("a positive value must be added before division")
@@ -468,7 +501,8 @@ class SpectralODF(object):
         return self.wpd() / np.add(np.mean(self.s.spec, axis=1), epsilon)
 
     def _cd(self):
-        """Helper method used by cd() & rcd().
+        """
+        Helper method used by cd() & rcd().
 
         we use the simple implementation presented in:
         "Onset Detection Revisited"
@@ -491,7 +525,8 @@ class SpectralODF(object):
         return cd
 
     def cd(self):
-        """Complex Domain.
+        """
+        Complex Domain.
 
         "On the use of phase and energy for musical onset detection in the complex domain"
         Juan Pablo Bello, Chris Duxbury, Matthew Davies and Mark Sandler
@@ -502,11 +537,13 @@ class SpectralODF(object):
         return np.sum(np.abs(self._cd()), axis=1)
 
     def rcd(self):
-        """Rectified Complex Domain.
+        """
+        Rectified Complex Domain.
 
         "Onset Detection Revisited"
         Simon Dixon
         Proceedings of the 9th International Conference on Digital Audio Effects (DAFx), 2006
+
         """
         # rectified complex domain
         rcd = self._cd()
@@ -517,11 +554,14 @@ class SpectralODF(object):
 
 
 class Onsets(object):
-    """Onset Class"""
+    """
+    Onset Class.
+
+    """
     def __init__(self, activations, fps, online=True):
         """
-        Creates a new Onset object instance and performs peak-picking on the
-        given activations of the ODF (Onset Detection Function).
+        Creates a new Onset object instance with the given activations of the
+        ODF (OnsetDetectionFunction). The activations can be read in from a file.
 
         :param activations: an array containing the activations of the ODF
         :param fps: frame rate of the activations
@@ -540,16 +580,17 @@ class Onsets(object):
             # read in the activations from a file
             self.load(activations)
 
-    def detect(self, threshold, combine=30, pre_avg=100, pre_max=30, post_avg=0, post_max=0, delay=0):
-        """Detects the onsets.
+    def detect(self, threshold, combine=30, pre_avg=100, pre_max=30, post_avg=30, post_max=70, delay=0):
+        """
+        Detects the onsets.
 
         :param threshold: threshold for peak-picking
         :param combine: only report 1 onset for N miliseconds [default=30]
         :param pre_avg: use N miliseconds past information for moving average [default=100]
         :param pre_max: use N miliseconds past information for moving maximum [default=30]
         :param post_avg: use N miliseconds future information for moving average [default=0]
-        :param post_max: use N miliseconds future information for moving maximum [default=0]
-        :param delay: report the onset N miliseconds in the future [default=0]
+        :param post_max: use N miliseconds future information for moving maximum [default=40]
+        :param delay: report the onset N miliseconds delayed [default=0]
 
         In online mode, post_avg and post_max are set to 0.
 
@@ -611,7 +652,8 @@ class Onsets(object):
                 f.write(str(pos) + '\n')
 
     def save(self, filename):
-        """Save the onset activations to the given file
+        """
+        Save the onset activations to the given file.
 
         :param filename: the target file name
 
@@ -619,7 +661,8 @@ class Onsets(object):
         self.activations.tofile(filename)
 
     def load(self, filename):
-        """Load the onset activations from the given file
+        """
+        Load the onset activations from the given file.
 
         :param filename: the target file name
 
@@ -671,20 +714,20 @@ def parser():
     pre_opts.add_argument('--equal', action='store_true', default=False, help='equalize triangular windows to have equal area')
     # logarithm
     pre_opts.add_argument('--log', action='store_true', default=None, help='logarithmic magnitude')
-    pre_opts.add_argument('--mul', action='store', default=20, type=float, help='multiplier (before taking the log) [default=20]')
+    pre_opts.add_argument('--mul', action='store', default=1, type=float, help='multiplier (before taking the log) [default=1]')
     pre_opts.add_argument('--add', action='store', default=1, type=float, help='value added (before taking the log) [default=1]')
     # onset detection
     onset_opts = p.add_argument_group('onset detection arguments')
     onset_opts.add_argument('-o', dest='odf', action='append', default=[], help='use this onset detection function (can be used multiple times) [hfc,sd,sf,mkl,pd,wpd,nwpd,cd,rcd,all]')
-    onset_opts.add_argument('-t', dest='threshold', action='store', type=float, default=4, help='detection threshold')
+    onset_opts.add_argument('-t', dest='threshold', action='store', type=float, default=2.5, help='detection threshold')
     onset_opts.add_argument('--combine', action='store', type=float, default=30, help='combine onsets within N miliseconds [default=30]')
     onset_opts.add_argument('--pre_avg', action='store', type=float, default=100, help='build average over N previous miliseconds [default=100]')
     onset_opts.add_argument('--pre_max', action='store', type=float, default=30, help='search maximum over N previous miliseconds [default=30]')
-    onset_opts.add_argument('--post_avg', action='store', type=float, default=0, help='build average over N following miliseconds [default=0]')
-    onset_opts.add_argument('--post_max', action='store', type=float, default=0, help='search maximum over N following miliseconds [default=0]')
-    onset_opts.add_argument('--delay', action='store', type=float, default=0, help='combine onsets within N miliseconds [default=0]')
+    onset_opts.add_argument('--post_avg', action='store', type=float, default=70, help='build average over N following miliseconds [default=70]')
+    onset_opts.add_argument('--post_max', action='store', type=float, default=30, help='search maximum over N following miliseconds [default=30]')
+    onset_opts.add_argument('--delay', action='store', type=float, default=0, help='report the onsets N miliseconds delayed [default=0]')
     # version
-    p.add_argument('--version', action='version', version='%(prog)s 1.03 (2013-02-25)')
+    p.add_argument('--version', action='version', version='%(prog)s 1.04 (2013-02-27)')
     # parse arguments
     args = p.parse_args()
 
@@ -793,9 +836,10 @@ def main():
             else:
                 # use the spectrogram to create an SpectralODF object
                 sodf = SpectralODF(s, args.ratio, args.frames)
-                # perform detection function on the object and create an Onset
-                # object with the returned activations
-                o = Onsets(getattr(sodf, odf)(), args.fps, args.online)
+                # perform detection function on the object
+                act = getattr(sodf, odf)()
+                # create an Onset object with the returned activations
+                o = Onsets(act, args.fps, args.online)
                 if args.save:
                     # save the raw ODF activations
                     o.save("%s.onsets.%s" % (filename, odf))
