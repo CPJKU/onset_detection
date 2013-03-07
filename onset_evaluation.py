@@ -159,10 +159,10 @@ def load_events(filename):
     events = []
     # try to read in the onsets from the file
     with open(filename, 'rb') as f:
-        # read in each line of the file (expects 1 value per line)
+        # read in each line of the file
         for line in f:
-            # append the event to the list
-            events.append(float(line))
+            # append the event (1st column) to the list, ignore the rest
+            events.append(float(line.split()[0]))
     # return
     return events
 
