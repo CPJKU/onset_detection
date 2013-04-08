@@ -67,6 +67,8 @@ class Filter(object):
         :param equal: normalize each band to equal energy [default=False]
 
         """
+        # samplerate
+        self.fs = fs
         # reduce fmax if necessary
         if fmax > fs / 2:
             fmax = fs / 2
@@ -784,7 +786,7 @@ def main():
     files.sort()
 
     # init filterbank
-    filterbank = None
+    filt = None
 
     # process the files
     for f in files:
@@ -816,13 +818,11 @@ def main():
                 s.aw(args.floor, args.relax)
             # filter
             if args.filter:
-                # create filterbank if needed
-                if filterbank is None:
-                    # TODO: cache filterbank, so it works with different sampling
-                    # rates of the wav file without constructing it each time
-                    filterbank = Filter(args.window / 2, w.samplerate, args.bands, args.fmin, args.fmax, args.equal).filterbank
+                # (re-)create filterbank if the samplerate of the audio changes
+                if (filt is None) or (filt.fs != w.samplerate):
+                    filt = Filter(args.window / 2, w.samplerate, args.bands, args.fmin, args.fmax, args.equal)
                 # filter the spectrogram
-                s.filter(filterbank)
+                s.filter(filt.filterbank)
             # log
             if args.log:
                 s.log(args.mul, args.add)
